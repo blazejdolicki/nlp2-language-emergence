@@ -1,4 +1,4 @@
 print("This is a demo file")
-another_bool_var = True
-if another_bool_var:
+some_other_var = True
+if some_other_var:
     print("Boolean var is true")
