@@ -21,16 +21,25 @@ from vision import Vision, BasicBlock
 from signal_game_dataset import SignalGameDataset
 from sender import Sender
 from receiver import Receiver
+import argparse
+
+# Parse command line arguments that vary between runs
+parser = argparse.ArgumentParser()
+parser.add_argument('--img_clas', action='store_false', 
+                    help='Whether we use image classification as an additional task.')
+
 
 # For convenience and reproducibility, we set some EGG-level command line arguments here
-opts = core.init(params=['--random_seed=7', # will initialize numpy, torch, and python RNGs
-                         '--lr=1e-3', # sets the learning rate for the selected optimizer 
-                         '--batch_size=64',
-                         '--vocab_size=100',
-                         '--max_len=10',
-                         '--n_epochs=15',
-                         '--tensorboard',
-                         ]) 
+opts = core.init(parser, params=['--random_seed=7', # will initialize numpy, torch, and python RNGs
+                                   '--lr=1e-3', # sets the learning rate for the selected optimizer 
+                                   '--batch_size=64',
+                                   '--vocab_size=100',
+                                   '--max_len=10',
+                                   '--n_epochs=15',
+                                   '--tensorboard',
+                                   ]) 
+
+print("Image classification task:", opts.img_clas)
 
 # Other configurations that are not part of the above command line arguments we define separately. 
 # Feel free to use a different format.
@@ -85,7 +94,7 @@ cifar_train_set = datasets.CIFAR100('./data', train=True, download=True, transfo
 cifar_test_set = datasets.CIFAR100('./data', train=False, transform=transform)
 
 print("Extract image features from train set")
-trainset = SignalGameDataset(cifar_train_set, args.game.num_imgs, vision)
+trainset = SignalGameDataset(cifar_train_set, args.game.num_imgs, vision, img_clas=opts.img_clas)
 trainloader = torch.utils.data.DataLoader(trainset, shuffle=True,
                                           batch_size=opts.batch_size, num_workers=0)
 
@@ -100,14 +109,16 @@ sender = core.RnnSenderGS(sender, opts.vocab_size, args.architecture.embed_size,
                           args.architecture.hidden_sender, cell=args.architecture.cell_type, max_len=opts.max_len, 
                           temperature=args.training.temperature, straight_through=True)
 
-receiver = Receiver(args.architecture.hidden_receiver, args.architecture.embed_size)
+receiver = Receiver(args.architecture.hidden_receiver, args.architecture.embed_size, opts.img_clas)
 receiver = core.RnnReceiverGS(receiver, opts.vocab_size, args.architecture.embed_size, 
                               args.architecture.hidden_receiver, cell=args.architecture.cell_type)
 
 def loss(_sender_input,  _message, _receiver_input, receiver_output, _labels):
+    receiver_output = receiver_output[:,:args.game.num_imgs]
     acc = (receiver_output.argmax(dim=1) == _labels).detach().float()
     loss = F.cross_entropy(receiver_output, _labels, reduction="none")
     # print('Loss: ', loss.mean().cpu().item(), 'Acc: ', acc.mean().cpu().item())
+    # total_loss = sg_loss + img_clas_rate * img_class_loss
     return loss, {'acc': acc}
     
 model_prefix = f"maxlen_{opts.max_len}" # Example
