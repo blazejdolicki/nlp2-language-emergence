@@ -18,40 +18,32 @@ import types
 import json
 
 from vision import Vision, BasicBlock
-from signal_game_dataset import SignalGameDataset
+from dataset import SignalGameDataset
 from sender import Sender
 from receiver import Receiver
+from loss import ImageClasLoss, signal_game_loss
+
 import argparse
+from argparse import Namespace
+
 
 # Parse command line arguments that vary between runs
 parser = argparse.ArgumentParser()
-parser.add_argument('--img_clas', action='store_false', 
+parser.add_argument('--img_clas', action='store_true', 
                     help='Whether we use image classification as an additional task.')
+parser.add_argument('--ic_loss_weight', type=float, default=1.0, 
+                    help='Weight assigned to the image classification loss.')
+parser.add_argument('--num_imgs', type=int, default=2, 
+                    help='Number of images used in the game (number of distractors + 1)')
 
+our_args = parser.parse_args()
 
-# For convenience and reproducibility, we set some EGG-level command line arguments here
-opts = core.init(parser, params=['--random_seed=7', # will initialize numpy, torch, and python RNGs
-                                   '--lr=1e-3', # sets the learning rate for the selected optimizer 
-                                   '--batch_size=64',
-                                   '--vocab_size=100',
-                                   '--max_len=10',
-                                   '--n_epochs=15',
-                                   '--tensorboard',
-                                   ]) 
-
-print("Image classification task:", opts.img_clas)
-
-# Other configurations that are not part of the above command line arguments we define separately. 
-# Feel free to use a different format.
 _args_dict = {
     "architecture" : {
         "embed_size"      : 64,
         "hidden_sender"   : 200,
         "hidden_receiver" : 200,
         "cell_type"       : 'gru',
-    },
-    "game" : {
-        "num_imgs"        : 2, # number of images the game is played with
     },
     "training" : {
         "temperature"     : 1,
@@ -61,7 +53,27 @@ _args_dict = {
 }
 
 # A trick for having a hierarchical argument namespace from the above dict
-args = json.loads(json.dumps(_args_dict), object_hook=lambda item: types.SimpleNamespace(**item))
+fixed_args = json.loads(json.dumps(_args_dict), object_hook=lambda item: types.SimpleNamespace(**item))
+
+args = Namespace(**vars(our_args), **vars(fixed_args))
+    
+
+# For convenience and reproducibility, we set some EGG-level command line arguments here
+opts = core.init(params=['--random_seed=7', # will initialize numpy, torch, and python RNGs
+                                   '--lr=1e-3', # sets the learning rate for the selected optimizer 
+                                   '--batch_size=64',
+                                   '--vocab_size=100',
+                                   '--max_len=10',
+                                   '--n_epochs=15',
+                                   '--tensorboard',
+                                   ]) 
+
+print("Parameters specified in the command line:") 
+print("Image classification task:", args.img_clas)
+print("Image classification loss weight:", args.ic_loss_weight)
+print("Number of images in the game:", args.num_imgs)
+print()
+
 
 print("Cell type of the agents:", args.architecture.cell_type)
 
@@ -94,38 +106,37 @@ cifar_train_set = datasets.CIFAR100('./data', train=True, download=True, transfo
 cifar_test_set = datasets.CIFAR100('./data', train=False, transform=transform)
 
 print("Extract image features from train set")
-trainset = SignalGameDataset(cifar_train_set, args.game.num_imgs, vision, img_clas=opts.img_clas)
+trainset = SignalGameDataset(cifar_train_set, args.num_imgs, vision, img_clas=args.img_clas)
 trainloader = torch.utils.data.DataLoader(trainset, shuffle=True,
                                           batch_size=opts.batch_size, num_workers=0)
 
 print("Extract image features from test set")
-testset = SignalGameDataset(cifar_test_set, args.game.num_imgs, vision)
+testset = SignalGameDataset(cifar_test_set, args.num_imgs, vision, img_clas=args.img_clas)
 testloader = torch.utils.data.DataLoader(testset, shuffle=False,
                                          batch_size=opts.batch_size, num_workers=0)
 
 
-sender = Sender(args.architecture.embed_size, args.game.num_imgs, args.architecture.hidden_sender)
+sender = Sender(args.architecture.embed_size, args.num_imgs, args.architecture.hidden_sender)
 sender = core.RnnSenderGS(sender, opts.vocab_size, args.architecture.embed_size, 
                           args.architecture.hidden_sender, cell=args.architecture.cell_type, max_len=opts.max_len, 
                           temperature=args.training.temperature, straight_through=True)
 
-receiver = Receiver(args.architecture.hidden_receiver, args.architecture.embed_size, opts.img_clas)
+receiver = Receiver(args.architecture.hidden_receiver, args.architecture.embed_size, args.img_clas)
 receiver = core.RnnReceiverGS(receiver, opts.vocab_size, args.architecture.embed_size, 
                               args.architecture.hidden_receiver, cell=args.architecture.cell_type)
 
-def loss(_sender_input,  _message, _receiver_input, receiver_output, _labels):
-    receiver_output = receiver_output[:,:args.game.num_imgs]
-    acc = (receiver_output.argmax(dim=1) == _labels).detach().float()
-    loss = F.cross_entropy(receiver_output, _labels, reduction="none")
-    # print('Loss: ', loss.mean().cpu().item(), 'Acc: ', acc.mean().cpu().item())
-    # total_loss = sg_loss + img_clas_rate * img_class_loss
-    return loss, {'acc': acc}
+
     
 model_prefix = f"maxlen_{opts.max_len}" # Example
 models_path = "/content/drive/My Drive/SignalGame/models" # location where we store trained models
 
 checkpointer = core.callbacks.CheckpointSaver(checkpoint_path=models_path, checkpoint_freq=0, prefix=model_prefix)
 
+if args.img_clas:
+    loss = ImageClasLoss(args.ic_loss_weight, args.num_imgs).get_loss
+else:
+    loss = signal_game_loss
+    
 game = core.SenderReceiverRnnGS(sender, receiver, loss)
 optimizer = torch.optim.Adam(game.parameters())
 

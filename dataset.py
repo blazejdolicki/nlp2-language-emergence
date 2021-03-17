@@ -3,13 +3,16 @@ import numpy as np
 from tqdm import tqdm
 
 class SignalGameDataset(torch.utils.data.Dataset):
-    def __init__(self, dataset, num_imgs, vision, classes=None, seed=1):
+    def __init__(self, dataset, num_imgs, vision, classes=None, seed=1, img_clas=False):
         self.dataset = dataset
         self.num_imgs = num_imgs
         self.vision = vision
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.img_clas = img_clas
+        
         np.random.seed(seed=seed)
-        self.img_features = self._extract_img_features() # (dataset_size, embed_size)
+        
+        self.img_features, self.img_class_labels = self._extract_img_features() # (dataset_size, embed_size)
 
     def __len__(self):
         return len(self.dataset)
@@ -29,7 +32,17 @@ class SignalGameDataset(torch.utils.data.Dataset):
         receiver_imgs = random_imgs[permutation]
         
         # set the label
-        target = permutation.argmin()
+        sg_target = permutation.argmin()
+        
+        if self.img_clas:
+            random_img_labels = self.img_class_labels[random_idxs]
+            # array of booleans that are true if the class of a given image is the same as the class of the target image
+            target_class = random_img_labels[0].squeeze()
+            is_target_class = (random_img_labels[permutation] == target_class).float().squeeze()
+            target = torch.cat((sg_target.unsqueeze(dim=0), is_target_class)) 
+        else:
+            target = sg_target
+
         
         return sender_imgs, target, receiver_imgs
 
@@ -40,9 +53,10 @@ class SignalGameDataset(torch.utils.data.Dataset):
             so we do it in batches.
         """
 
-        # read images from dataset into a single array
-        imgs = [img for img, label in self.dataset]
-        imgs = torch.stack(imgs)
+        # read images and labels from dataset into separate arrays
+        imgs, img_class_labels = zip(*self.dataset)
+        imgs = torch.stack(list(imgs)) # (dataset_size, 3, 32, 32)
+        img_class_labels = torch.Tensor(img_class_labels).reshape(-1, 1) # (dataset_size, 1)
         
         # if you run out of memory or your laptop freezes, decrease this number and try again
         VISION_BATCH_SIZE = 1000
@@ -54,6 +68,6 @@ class SignalGameDataset(torch.utils.data.Dataset):
             img = img.to(self.device)
             with torch.no_grad():
                 img_features.append(self.vision(img))
-        img_features = torch.cat(img_features)
-        return img_features
+        img_features = torch.cat(img_features) # (dataset_size, 64)
+        return img_features, img_class_labels
 

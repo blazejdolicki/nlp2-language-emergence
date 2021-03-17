@@ -15,3 +15,5 @@ ignore/
 image_embeddings_train.pkl
 
 image_embeddings_test.pkl
+
+param_tuning.sh

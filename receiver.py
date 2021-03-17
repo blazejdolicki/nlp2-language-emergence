@@ -28,10 +28,11 @@ class Receiver(nn.Module):
             
             img_clas_energies = torch.matmul(embed_imgs, img_clas_msg)
             img_clas_energies = img_clas_energies.squeeze()
+            energies = torch.cat((sg_energies, img_clas_energies), dim=1)
         else:
-            img_clas_energies = torch.zeros_like(sg_energies)
+            energies = sg_energies
             
-        energies = torch.cat((sg_energies, img_clas_energies), dim=1) # (batch_size, 2*num_imgs)
+         # (batch_size, 2*num_imgs)
             
         return energies # (batch_size, num_imgs)
                
