@@ -36,7 +36,7 @@ parser.add_argument('--ic_loss_weight', type=float, default=1.0,
 parser.add_argument('--num_imgs', type=int, default=2, 
                     help='Number of images used in the game (number of distractors + 1)')
 
-our_args = parser.parse_args()
+cmd_args = parser.parse_args()
 
 _args_dict = {
     "architecture" : {
@@ -55,7 +55,7 @@ _args_dict = {
 # A trick for having a hierarchical argument namespace from the above dict
 fixed_args = json.loads(json.dumps(_args_dict), object_hook=lambda item: types.SimpleNamespace(**item))
 
-args = Namespace(**vars(our_args), **vars(fixed_args))
+args = Namespace(**vars(cmd_args), **vars(fixed_args))
     
 
 # For convenience and reproducibility, we set some EGG-level command line arguments here
