@@ -3,12 +3,12 @@ import numpy as np
 from tqdm import tqdm
 
 class SignalGameDataset(torch.utils.data.Dataset):
-    def __init__(self, dataset, num_imgs, vision, classes=None, seed=1, img_clas=False):
+    def __init__(self, dataset, num_imgs, vision, task, classes=None, seed=1):
         self.dataset = dataset
         self.num_imgs = num_imgs
         self.vision = vision
+        self.task = task
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        self.img_clas = img_clas
         
         np.random.seed(seed=seed)
         
@@ -34,14 +34,25 @@ class SignalGameDataset(torch.utils.data.Dataset):
         # set the label
         sg_target = permutation.argmin()
         
-        if self.img_clas:
-            random_img_labels = self.img_class_labels[random_idxs]
-            # array of booleans that are true if the class of a given image is the same as the class of the target image
-            target_class = random_img_labels[0].squeeze()
-            is_target_class = (random_img_labels[permutation] == target_class).float().squeeze()
-            target = torch.cat((sg_target.unsqueeze(dim=0), is_target_class)) 
-        else:
+        if self.task == "standard":
             target = sg_target
+        elif self.task=="img_clas":
+            random_img_labels = self.img_class_labels[random_idxs]
+            # image class label of the target image
+            target_class = random_img_labels[0].squeeze()
+            # array of booleans that are true if the class of a given image is the same as the class of the target image
+            is_target_class = (random_img_labels[permutation] == target_class).float().squeeze()
+            # concatenate the signaling game label with the multilabel binary image classification label
+            target = torch.cat((sg_target.unsqueeze(dim=0), is_target_class)) 
+        elif self.task=="target_clas":
+            random_img_labels = self.img_class_labels[random_idxs]
+            # image class label of the target image
+            target_class = random_img_labels[0]
+            # concatenate the signaling game label with the multiclass target image classification label 
+            target = torch.cat((sg_target.unsqueeze(dim=0), target_class))
+        else:
+            assert False, "Wrong task name"
+            
 
         
         return sender_imgs, target, receiver_imgs
