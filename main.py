@@ -35,12 +35,14 @@ parser.add_argument('--task', type=str, choices=["standard", "img_clas", "target
                             `standard` is the vanilla signaling game
                             `img_clas` means the standard task and the task of predicting for each image 
                                        if it is the same class as the target image
-                            `target_clas` means the standard task and the task of predicting class of the target image""")
+                            `target_clas` means the standard task and the task of predicting class of the target image.""")
 
 parser.add_argument('--ic_loss_weight', type=float, default=1.0, 
                     help='Weight assigned to the image classification loss.')
 parser.add_argument('--num_imgs', type=int, default=2, 
-                    help='Number of images used in the game (number of distractors + 1)')
+                    help='Number of images used in the game (number of distractors + 1).')
+parser.add_argument("--same_class_prob", type=float, default=0.0,
+                    help="Probability that a distractor will have the same image class as the target image.")
 
 cmd_args = parser.parse_args()
 
@@ -78,6 +80,7 @@ print("Parameters specified in the command line:")
 print("Image classification task:", args.task)
 print("Image classification loss weight:", args.ic_loss_weight)
 print("Number of images in the game:", args.num_imgs)
+print("Same class probability", args.same_class_prob)
 print()
 
 
@@ -112,12 +115,12 @@ cifar_train_set = datasets.CIFAR100('./data', train=True, download=True, transfo
 cifar_test_set = datasets.CIFAR100('./data', train=False, transform=transform)
 
 print("Extract image features from train set")
-trainset = SignalGameDataset(cifar_train_set, args.num_imgs, vision, task=args.task)
+trainset = SignalGameDataset(cifar_train_set, args.num_imgs, vision, task=args.task, same_class_prob=args.same_class_prob)
 trainloader = torch.utils.data.DataLoader(trainset, shuffle=True,
                                           batch_size=opts.batch_size, num_workers=0)
 
 print("Extract image features from test set")
-testset = SignalGameDataset(cifar_test_set, args.num_imgs, vision, task=args.task)
+testset = SignalGameDataset(cifar_test_set, args.num_imgs, vision, task=args.task, same_class_prob=args.same_class_prob)
 testloader = torch.utils.data.DataLoader(testset, shuffle=False,
                                          batch_size=opts.batch_size, num_workers=0)
 

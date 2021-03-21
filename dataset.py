@@ -1,25 +1,52 @@
 import torch
 import numpy as np
 from tqdm import tqdm
+from collections import defaultdict
 
 class SignalGameDataset(torch.utils.data.Dataset):
-    def __init__(self, dataset, num_imgs, vision, task, classes=None, seed=1):
+    def __init__(self, dataset, num_imgs, vision, task, classes=None, same_class_prob=0.0, seed=1):
         self.dataset = dataset
         self.num_imgs = num_imgs
         self.vision = vision
         self.task = task
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        
+        self.same_class_prob = same_class_prob
         np.random.seed(seed=seed)
         
         self.img_features, self.img_class_labels = self._extract_img_features() # (dataset_size, embed_size)
-
+        self._create_class_index()
+        
     def __len__(self):
         return len(self.dataset)
+    
+    def randint_exclude(self, target_idx):
+        """
+        Get distractor indices which are different than target index.
+        """
+        random_idxs = []
+        
+        # sample distractors until you get enough
+        while len(random_idxs) != self.num_imgs-1:
+            random_float = np.random.random_sample()
+            
+            if random_float < self.same_class_prob: # sample distractor with the same class as target
+                target_class_label = self.img_class_labels[target_idx]
+                # sample an index from all indices from a given class
+                random_idx = np.random.choice(self.class_idxs[target_class_label.item()], size=None)
+            else: # sample distractor with any class
+                random_idx = np.random.randint(low=0, high=self.__len__())
+            
+            # if the distractor index is different than target, add it to the list of indices
+            if random_idx != target_idx:
+                random_idxs.append(random_idx)
+                
+        return random_idxs
+                
 
     def __getitem__(self, item):
+        
         # get random images
-        random_idxs = np.random.randint(low=0, high=self.__len__(), size=self.num_imgs)
+        random_idxs = [item] + self.randint_exclude(item)
         random_imgs = self.img_features[random_idxs]
         
         # get a random permutation of integers from 0 to num_imgs-1
@@ -81,4 +108,8 @@ class SignalGameDataset(torch.utils.data.Dataset):
                 img_features.append(self.vision(img))
         img_features = torch.cat(img_features) # (dataset_size, 64)
         return img_features, img_class_labels
-
+        
+    def _create_class_index(self):
+        self.class_idxs = defaultdict(list)
+        for i, label in enumerate(self.img_class_labels):
+            self.class_idxs[label.item()].append(i)
