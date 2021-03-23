@@ -43,6 +43,7 @@ parser.add_argument('--num_imgs', type=int, default=2,
                     help='Number of images used in the game (number of distractors + 1).')
 parser.add_argument("--same_class_prob", type=float, default=0.0,
                     help="Probability that a distractor will have the same image class as the target image.")
+parser.add_argument("--seed", type=int, default=7, help="Random seed.")
 
 cmd_args = parser.parse_args()
 
@@ -65,15 +66,21 @@ fixed_args = json.loads(json.dumps(_args_dict), object_hook=lambda item: types.S
 
 args = Namespace(**vars(cmd_args), **vars(fixed_args))
     
+from datetime import datetime
+
+now = datetime.now()
+date_time = now.strftime("%d_%m_%Y_%H_%M_%S")
+log_path = f"{date_time}_task_type_{args.task}_seed_{args.seed}"
 
 # For convenience and reproducibility, we set some EGG-level command line arguments here
-opts = core.init(params=['--random_seed=7', # will initialize numpy, torch, and python RNGs
+opts = core.init(params=[f'--random_seed={args.seed}', # will initialize numpy, torch, and python RNGs
                                    '--lr=1e-3', # sets the learning rate for the selected optimizer 
                                    '--batch_size=64',
                                    '--vocab_size=100',
-                                   '--max_len=10',
-                                   '--n_epochs=15',
+                                   '--max_len=10', 
+                                   '--n_epochs=15', 
                                    '--tensorboard',
+                                   f'--tensorboard_dir=runs/{log_path}'
                                    ]) 
 
 print("Parameters specified in the command line:") 
@@ -153,11 +160,14 @@ else:
 game = core.SenderReceiverRnnGS(sender, receiver, loss)
 optimizer = torch.optim.Adam(game.parameters())
 
+epoch_range = list(range(1,opts.n_epochs+1))
 callbacks = [core.TemperatureUpdater(agent=game.sender, decay=args.training.decay, minimum=0.1),
              core.ConsoleLogger(as_json=True, print_train_loss=True),
              core.TensorboardLogger(),
              core.EarlyStopperAccuracy(args.training.early_stop_accuracy),
-             checkpointer]
+             checkpointer,
+             # save interactions after every epoch
+             core.InteractionSaver(train_epochs=epoch_range, test_epochs=epoch_range)]
 
 trainer = core.Trainer(game=game, optimizer=optimizer, train_data=trainloader,
                        validation_data=testloader, callbacks=callbacks)
