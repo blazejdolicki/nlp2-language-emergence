@@ -70,7 +70,10 @@ from datetime import datetime
 
 now = datetime.now()
 date_time = now.strftime("%d_%m_%Y_%H_%M_%S")
-log_path = f"{date_time}_task_type_{args.task}_seed_{args.seed}"
+log_path = f"{date_time}_task_{args.task}_seed_{args.seed}"
+
+print()
+print("Log path:", log_path)
 
 # For convenience and reproducibility, we set some EGG-level command line arguments here
 opts = core.init(params=[f'--random_seed={args.seed}', # will initialize numpy, torch, and python RNGs
@@ -82,6 +85,13 @@ opts = core.init(params=[f'--random_seed={args.seed}', # will initialize numpy, 
                                    '--tensorboard',
                                    f'--tensorboard_dir=runs/{log_path}'
                                    ]) 
+
+# save 
+if not os.path.exists("args/"):
+    os.makedirs("args/")
+    
+with open(f'args/args_{log_path}.json', 'w') as fp:
+    json.dump(vars(cmd_args), fp)
 
 print("Parameters specified in the command line:") 
 print("Image classification task:", args.task)
@@ -172,4 +182,5 @@ callbacks = [core.TemperatureUpdater(agent=game.sender, decay=args.training.deca
 trainer = core.Trainer(game=game, optimizer=optimizer, train_data=trainloader,
                        validation_data=testloader, callbacks=callbacks)
 
+print("Start training")
 trainer.train(n_epochs=opts.n_epochs)
