@@ -48,6 +48,7 @@ parser.add_argument("--testdataset", type=str, choices=["Cifar100", "gaussian_no
                     help="""Choose which dataset to test the model on:
                             `Cifar100` is the standard dataset
                             `gaussian_noise` is a dataset containing random gaussian noise""")
+parser.add_argument("--game_type", type=str, choices=["SenderReceiverRnnGS", "SenderReceiverRnnReinforce", "SymbolGameReinforce"], default="SenderReceiverRnnGS")
 
 cmd_args = parser.parse_args()
 
@@ -99,10 +100,11 @@ with open(f'args/args_{log_path}.json', 'w') as fp:
 
 print("Parameters specified in the command line:")
 print("Image classification task:", args.task)
-print("Image classification loss weight:", args.ic_loss_weight)
-print("Number of images in the game:", args.num_imgs)
-print("Same class probability", args.same_class_prob)
-print("Test dataset", args.testdataset)
+print("Game type: ", args.game_type)
+print("Image classification loss weight: ", args.ic_loss_weight)
+print("Number of images in the game: ", args.num_imgs)
+print("Same class probability: ", args.same_class_prob)
+print("Test dataset: ", args.testdataset)
 print()
 
 
@@ -152,15 +154,32 @@ elif args.testdataset == "gaussian_noise":
     testloader = torch.utils.data.DataLoader(testset, shuffle=False,
                                          batch_size=opts.batch_size, num_workers=0)
 
-sender = Sender(args.architecture.embed_size, args.num_imgs, args.architecture.hidden_sender)
-sender = core.RnnSenderGS(sender, opts.vocab_size, args.architecture.embed_size,
-                          args.architecture.hidden_sender, cell=args.architecture.cell_type, max_len=opts.max_len,
-                          temperature=args.training.temperature, straight_through=True)
-
-receiver = Receiver(args.architecture.hidden_receiver, args.architecture.embed_size, args.task, num_classes)
-receiver = core.RnnReceiverGS(receiver, opts.vocab_size, args.architecture.embed_size,
-                              args.architecture.hidden_receiver, cell=args.architecture.cell_type)
-
+if args.game_type == "SenderReceiverRnnGS":
+    sender = Sender(args.architecture.embed_size, args.num_imgs, args.architecture.hidden_sender)
+    sender = core.RnnSenderGS(sender, opts.vocab_size, args.architecture.embed_size,
+                              args.architecture.hidden_sender, cell=args.architecture.cell_type, max_len=opts.max_len,
+                              temperature=args.training.temperature, straight_through=True)
+    receiver = Receiver(args.architecture.hidden_receiver, args.architecture.embed_size, args.task, num_classes)
+    receiver = core.RnnReceiverGS(receiver, opts.vocab_size, args.architecture.embed_size,
+                                  args.architecture.hidden_receiver, cell=args.architecture.cell_type)
+elif args.game_type == "SenderReceiverRnnReinforce":
+    sender = Sender(args.architecture.embed_size, args.num_imgs, args.architecture.hidden_sender)
+    sender = core.RnnSenderGS(sender, opts.vocab_size, args.architecture.embed_size,
+                              args.architecture.hidden_sender, cell=args.architecture.cell_type, max_len=opts.max_len,
+                              temperature=args.training.temperature, straight_through=True)
+    receiver = Receiver(args.architecture.hidden_receiver, args.architecture.embed_size, args.task, num_classes)
+    receiver = core.RnnReceiverGS(receiver, opts.vocab_size, args.architecture.embed_size,
+                                  args.architecture.hidden_receiver, cell=args.architecture.cell_type)
+elif args.game_type == "SymbolGameReinforce":
+    sender = Sender(args.architecture.embed_size, args.num_imgs, args.architecture.hidden_sender)
+    # sender = core.reinforceWrapper(sender, opts.vocab_size, args.architecture.embed_size,
+    #                           args.architecture.hidden_sender, cell=args.architecture.cell_type, max_len=opts.max_len,
+    #                           temperature=args.training.temperature, straight_through=True)
+    sender = core.ReinforceWrapper(sender)
+    receiver = Receiver(args.architecture.hidden_receiver, args.architecture.embed_size, args.task, num_classes)
+    receiver = core.SymbolReceiverWrapper(receiver, opts.vocab_size, args.architecture.embed_size,
+                                  args.architecture.hidden_receiver)
+    receiver = core.ReinforceDeterministicWrapper(receiver)
 
 
 model_prefix = f"maxlen_{opts.max_len}" # Example
@@ -177,7 +196,13 @@ elif args.task=="target_clas":
 else:
     assert False, "Wrong task"
 
-game = core.SenderReceiverRnnGS(sender, receiver, loss)
+if args.game_type == "SenderReceiverRnnGS":
+    game = core.SenderReceiverRnnGS(sender, receiver, loss)
+elif args.game_type == "SenderReceiverRnnReinforce":
+    game = core.SenderReceiverRnnReinforce(sender, receiver, loss)
+elif args.game_type == "SymbolGameReinforce":
+    game = core.SymbolGameReinforce(sender, receiver, loss)
+
 optimizer = torch.optim.Adam(game.parameters())
 
 epoch_range = list(range(1,opts.n_epochs+1))
