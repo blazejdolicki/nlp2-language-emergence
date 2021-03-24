@@ -164,21 +164,19 @@ if args.game_type == "SenderReceiverRnnGS":
                                   args.architecture.hidden_receiver, cell=args.architecture.cell_type)
 elif args.game_type == "SenderReceiverRnnReinforce":
     sender = Sender(args.architecture.embed_size, args.num_imgs, args.architecture.hidden_sender)
-    sender = core.RnnSenderGS(sender, opts.vocab_size, args.architecture.embed_size,
-                              args.architecture.hidden_sender, cell=args.architecture.cell_type, max_len=opts.max_len,
-                              temperature=args.training.temperature, straight_through=True)
     receiver = Receiver(args.architecture.hidden_receiver, args.architecture.embed_size, args.task, num_classes)
-    receiver = core.RnnReceiverGS(receiver, opts.vocab_size, args.architecture.embed_size,
+    
+    sender = core.RnnSenderReinforce(sender, opts.vocab_size, args.architecture.embed_size,
+                              args.architecture.hidden_sender, cell=args.architecture.cell_type, max_len=opts.max_len)
+    receiver = core.RnnReceiverDeterministic(receiver, opts.vocab_size, args.architecture.embed_size,
                                   args.architecture.hidden_receiver, cell=args.architecture.cell_type)
 elif args.game_type == "SymbolGameReinforce":
-    sender = Sender(args.architecture.embed_size, args.num_imgs, args.architecture.hidden_sender)
-    # sender = core.reinforceWrapper(sender, opts.vocab_size, args.architecture.embed_size,
-    #                           args.architecture.hidden_sender, cell=args.architecture.cell_type, max_len=opts.max_len,
-    #                           temperature=args.training.temperature, straight_through=True)
+    sender = Sender(args.architecture.embed_size, args.num_imgs, None, game_type=args.game_type)
+    receiver = Receiver(None, args.architecture.embed_size, args.task, num_classes,
+                        game_type=args.game_type)
+
     sender = core.ReinforceWrapper(sender)
-    receiver = Receiver(args.architecture.hidden_receiver, args.architecture.embed_size, args.task, num_classes)
-    receiver = core.SymbolReceiverWrapper(receiver, opts.vocab_size, args.architecture.embed_size,
-                                  args.architecture.hidden_receiver)
+    receiver = core.SymbolReceiverWrapper(receiver, opts.vocab_size, args.architecture.embed_size)
     receiver = core.ReinforceDeterministicWrapper(receiver)
 
 
@@ -201,21 +199,26 @@ if args.game_type == "SenderReceiverRnnGS":
 elif args.game_type == "SenderReceiverRnnReinforce":
     game = core.SenderReceiverRnnReinforce(sender, receiver, loss)
 elif args.game_type == "SymbolGameReinforce":
-    game = core.SymbolGameReinforce(sender, receiver, loss)
+    game = core.SymbolGameReinforce(sender, receiver, loss, sender_entropy_coeff=0.05,
+                                    receiver_entropy_coeff=0.0)
 
 optimizer = torch.optim.Adam(game.parameters())
 
 epoch_range = list(range(1,opts.n_epochs+1))
-callbacks = [core.TemperatureUpdater(agent=game.sender, decay=args.training.decay, minimum=0.1),
-             core.ConsoleLogger(as_json=True, print_train_loss=True),
+callbacks = ([core.ConsoleLogger(as_json=True, print_train_loss=True),
              core.TensorboardLogger(),
              core.EarlyStopperAccuracy(args.training.early_stop_accuracy),
              checkpointer,
              # save interactions after every epoch
-             core.InteractionSaver(train_epochs=epoch_range, test_epochs=epoch_range)]
+             core.InteractionSaver(train_epochs=epoch_range, test_epochs=epoch_range)] 
+            + [core.TemperatureUpdater(agent=game.sender, decay=args.training.decay, minimum=0.1)] 
+               if args.game_type == "SenderReceiverRnnGS" else [])
+            
 
 trainer = core.Trainer(game=game, optimizer=optimizer, train_data=trainloader,
                        validation_data=testloader, callbacks=callbacks)
 
 print("Start training")
 trainer.train(n_epochs=opts.n_epochs)
+
+trainer.eval()
