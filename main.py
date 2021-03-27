@@ -25,7 +25,7 @@ from loss import signal_game_loss, ImageClasLoss, TargetClasLoss
 
 import argparse
 from argparse import Namespace
-
+from best_epoch_checkpoint import BestEpochCheckpointSaver
 
 
 # Parse command line arguments that vary between runs
@@ -181,10 +181,10 @@ elif args.game_type == "SymbolGameReinforce":
     receiver = core.ReinforceDeterministicWrapper(receiver)
 
 
-model_prefix = f"model_{log_path}" # Example
-models_path = "checkpoints" # location where we store trained models
+model_prefix = f"model" # Example
+models_path = f"checkpoints/{log_path}" # location where we store trained models
 
-checkpointer = core.callbacks.CheckpointSaver(checkpoint_path=models_path, checkpoint_freq=1, prefix=model_prefix)
+best_epoch_checkpointer = BestEpochCheckpointSaver(checkpoint_path=models_path, checkpoint_freq=0, prefix=model_prefix)
 
 if args.task=="standard":
     loss = signal_game_loss
@@ -209,7 +209,7 @@ epoch_range = list(range(1,opts.n_epochs+1))
 callbacks = [core.ConsoleLogger(as_json=True, print_train_loss=True),
              core.TensorboardLogger(),
              core.EarlyStopperAccuracy(args.training.early_stop_accuracy),
-             checkpointer,
+             best_epoch_checkpointer,
              # save interactions after every epoch
              core.InteractionSaver(train_epochs=epoch_range, test_epochs=epoch_range)] 
 
@@ -224,11 +224,16 @@ trainer = core.Trainer(game=game, optimizer=optimizer, train_data=trainloader,
 print("Start training")
 trainer.train(n_epochs=opts.n_epochs)
 
+
 if args.eval_noise:
     print("Evaluate trained model on noise images")
+    # load model from the best epoch
+    trainer.load_from_checkpoint(f"{models_path}/best_model.tar")
+    # set the noise dataset as validation set
     trainer.validation_data = noiseloader
+    # evaluate on the noise dataset
     validation_loss, validation_interaction = trainer.eval()
-    epoch = opts.n_epochs # placeholder value
+    epoch = opts.n_epochs+1 # placeholder integer value
     
     for callback in trainer.callbacks:
         callback.on_test_end(validation_loss, validation_interaction, epoch)
