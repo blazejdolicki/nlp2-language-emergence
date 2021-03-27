@@ -8,18 +8,21 @@ log_file = open(f"logs/log_{date_time}.txt", "w")
 
 tasks = ["standard", "img_clas", "target_clas"]
 n_imgs = [2]
-same_class_probs = [0.0, 0.5, 1.0]
-seeds = [7, 122, 809]
+same_class_probs = [0.5]
+seeds = [7]
+test_sets = ["Cifar100","gaussian_noise"]
 for task in tasks:
     for num_imgs in n_imgs:
         for same_class_prob in same_class_probs:
             for seed in seeds:
-                subprocess.call(["python", "main.py",  
-                                "--task", task, 
-                                "--num_imgs", str(num_imgs), 
-                                "--same_class_prob", str(same_class_prob),
-                                "--seed",str(seed)], 
-                                stdout=log_file)
+                for test_set in test_sets:
+                    subprocess.call(["python", "main.py",  
+                                    "--task", task, 
+                                    "--num_imgs", str(num_imgs), 
+                                    "--same_class_prob", str(same_class_prob),
+                                    "--seed",str(seed),
+                                    "--testdataset  ",test_set], 
+                                    stdout=log_file)
             
 with open(f"logs/log_{date_time}.txt", "r") as f:
     log = f.read()

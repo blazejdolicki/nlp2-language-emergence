@@ -86,7 +86,7 @@ opts = core.init(params=[f'--random_seed={args.seed}', # will initialize numpy, 
                                    '--batch_size=64',
                                    '--vocab_size=100',
                                    '--max_len=10',
-                                   '--n_epochs=15',
+                                   '--n_epochs=10',
                                    '--tensorboard',
                                    f'--tensorboard_dir=runs/{log_path}'
                                    ])
@@ -150,9 +150,11 @@ if args.testdataset == "Cifar100":
                                          batch_size=opts.batch_size, num_workers=0)
 elif args.testdataset == "gaussian_noise":
     print("Extract image features from test set gaussian noise")
-    testset = GaussianNoiseDataset(num_imgs=args.num_imgs, vision=vision, dataset_size=10000)
+    testset = GaussianNoiseDataset(num_imgs=args.num_imgs, vision=vision, task=args.task, dataset_size=10000)
     testloader = torch.utils.data.DataLoader(testset, shuffle=False,
                                          batch_size=opts.batch_size, num_workers=0)
+
+core.util._set_seed(args.seed)
 
 if args.game_type == "SenderReceiverRnnGS":
     sender = Sender(args.architecture.embed_size, args.num_imgs, args.architecture.hidden_sender)
@@ -205,15 +207,18 @@ elif args.game_type == "SymbolGameReinforce":
 optimizer = torch.optim.Adam(game.parameters())
 
 epoch_range = list(range(1,opts.n_epochs+1))
-callbacks = ([core.ConsoleLogger(as_json=True, print_train_loss=True),
+callbacks = [core.ConsoleLogger(as_json=True, print_train_loss=True),
              core.TensorboardLogger(),
              core.EarlyStopperAccuracy(args.training.early_stop_accuracy),
              checkpointer,
              # save interactions after every epoch
              core.InteractionSaver(train_epochs=epoch_range, test_epochs=epoch_range)] 
-            + [core.TemperatureUpdater(agent=game.sender, decay=args.training.decay, minimum=0.1)] 
-               if args.game_type == "SenderReceiverRnnGS" else [])
+
+if args.game_type == "SenderReceiverRnnGS":
+    temp = core.TemperatureUpdater(agent=game.sender, decay=args.training.decay, minimum=0.1)
+    callbacks.append(temp) 
             
+print(callbacks)
 
 trainer = core.Trainer(game=game, optimizer=optimizer, train_data=trainloader,
                        validation_data=testloader, callbacks=callbacks)

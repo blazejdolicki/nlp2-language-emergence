@@ -116,13 +116,14 @@ class SignalGameDataset(torch.utils.data.Dataset):
 
 
 class GaussianNoiseDataset(torch.utils.data.Dataset):
-    def __init__(self, num_imgs, vision, dataset_size, classes=None, seed=1, im_size=(3, 32, 32), mean=0.0, std_dev=1.0):
+    def __init__(self, num_imgs, vision, task, dataset_size, classes=None, seed=1, im_size=(3, 32, 32), mean=0.0, std_dev=1.0):
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.mean = mean
         self.std_dev = std_dev
         self.num_imgs = num_imgs
         self.im_size = im_size
         self.dataset_size = dataset_size
+        self.task = task
         self.dataset = self._init_dataset()
 
 
@@ -133,11 +134,31 @@ class GaussianNoiseDataset(torch.utils.data.Dataset):
 
     def __len__(self):
         return len(self.dataset)
+        
+    def randint_exclude(self, target_idx):
+        """
+        Get distractor indices which are different than target index.
+        """
+        random_idxs = []
+
+        # sample distractors until you get enough
+        while len(random_idxs) != self.num_imgs-1:
+            random_float = np.random.random_sample()
+
+            random_idx = np.random.randint(low=0, high=self.__len__())
+
+            # if the distractor index is different than target, add it to the list of indices
+            if random_idx != target_idx:
+                random_idxs.append(random_idx)
+
+        return random_idxs
+
 
     def __getitem__(self, item):
         # get random images
-        random_idxs = np.random.randint(low=0, high=self.__len__(), size=self.num_imgs)
+        random_idxs = [item] + self.randint_exclude(item)
         random_imgs = self.img_features[random_idxs]
+
         # get a random permutation of integers from 0 to num_imgs-1
         permutation = torch.randperm(self.num_imgs)
 
@@ -148,7 +169,18 @@ class GaussianNoiseDataset(torch.utils.data.Dataset):
         receiver_imgs = random_imgs[permutation]
 
         # set the label
-        target = permutation.argmin()
+        sg_target = permutation.argmin()
+        
+        if self.task == "standard":
+            target = sg_target
+        elif self.task=="img_clas":
+            is_target_class = torch.zeros(2)
+            target = torch.cat((sg_target.unsqueeze(dim=0), is_target_class))
+        elif self.task=="target_clas":
+            target_class = torch.zeros(1).float()
+            target = torch.cat((sg_target.unsqueeze(dim=0), target_class))
+        else:
+            assert False, "Wrong task name"
 
         return sender_imgs, target, receiver_imgs
 
