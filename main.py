@@ -44,10 +44,8 @@ parser.add_argument('--num_imgs', type=int, default=2,
 parser.add_argument("--same_class_prob", type=float, default=0.0,
                     help="Probability that a distractor will have the same image class as the target image.")
 parser.add_argument("--seed", type=int, default=7, help="Random seed.")
-parser.add_argument("--testdataset", type=str, choices=["Cifar100", "gaussian_noise"], default = "Cifar100",
-                    help="""Choose which dataset to test the model on:
-                            `Cifar100` is the standard dataset
-                            `gaussian_noise` is a dataset containing random gaussian noise""")
+parser.add_argument("--eval_noise", action='store_true',
+                    help="Set this flag if you want to evaluate the trained model on Gaussian noise")
 parser.add_argument("--game_type", type=str, choices=["SenderReceiverRnnGS", "SenderReceiverRnnReinforce", "SymbolGameReinforce"], default="SenderReceiverRnnGS")
 
 cmd_args = parser.parse_args()
@@ -104,7 +102,7 @@ print("Game type: ", args.game_type)
 print("Image classification loss weight: ", args.ic_loss_weight)
 print("Number of images in the game: ", args.num_imgs)
 print("Same class probability: ", args.same_class_prob)
-print("Test dataset: ", args.testdataset)
+print("Evaluate on Gaussian noise images?", args.eval_noise)
 print()
 
 
@@ -143,17 +141,18 @@ trainset = SignalGameDataset(cifar_train_set, args.num_imgs, vision, task=args.t
 trainloader = torch.utils.data.DataLoader(trainset, shuffle=True,
                                           batch_size=opts.batch_size, num_workers=0)
 
-if args.testdataset == "Cifar100":
-    print("Extract image features from test set Cifar100")
-    testset = SignalGameDataset(cifar_test_set, args.num_imgs, vision, task=args.task, same_class_prob=args.same_class_prob)
-    testloader = torch.utils.data.DataLoader(testset, shuffle=False,
-                                         batch_size=opts.batch_size, num_workers=0)
-elif args.testdataset == "gaussian_noise":
-    print("Extract image features from test set gaussian noise")
-    testset = GaussianNoiseDataset(num_imgs=args.num_imgs, vision=vision, task=args.task, dataset_size=10000)
-    testloader = torch.utils.data.DataLoader(testset, shuffle=False,
+print("Extract image features from test set Cifar100")
+testset = SignalGameDataset(cifar_test_set, args.num_imgs, vision, task=args.task, same_class_prob=args.same_class_prob)
+testloader = torch.utils.data.DataLoader(testset, shuffle=False,
                                          batch_size=opts.batch_size, num_workers=0)
 
+if args.eval_noise:
+    print("Extract image features from gaussian noise dataset")
+    noiseset = GaussianNoiseDataset(num_imgs=args.num_imgs, vision=vision, task=args.task, dataset_size=10000)
+    noiseloader = torch.utils.data.DataLoader(noiseset, shuffle=False,
+                                         batch_size=opts.batch_size, num_workers=0)
+
+# reset seed because otherwise generating the noise dataset might effect training performance
 core.util._set_seed(args.seed)
 
 if args.game_type == "SenderReceiverRnnGS":
@@ -182,10 +181,10 @@ elif args.game_type == "SymbolGameReinforce":
     receiver = core.ReinforceDeterministicWrapper(receiver)
 
 
-model_prefix = f"maxlen_{opts.max_len}" # Example
-models_path = "/content/drive/My Drive/SignalGame/models" # location where we store trained models
+model_prefix = f"model_{log_path}" # Example
+models_path = "checkpoints" # location where we store trained models
 
-checkpointer = core.callbacks.CheckpointSaver(checkpoint_path=models_path, checkpoint_freq=0, prefix=model_prefix)
+checkpointer = core.callbacks.CheckpointSaver(checkpoint_path=models_path, checkpoint_freq=1, prefix=model_prefix)
 
 if args.task=="standard":
     loss = signal_game_loss
@@ -218,7 +217,6 @@ if args.game_type == "SenderReceiverRnnGS":
     temp = core.TemperatureUpdater(agent=game.sender, decay=args.training.decay, minimum=0.1)
     callbacks.append(temp) 
             
-print(callbacks)
 
 trainer = core.Trainer(game=game, optimizer=optimizer, train_data=trainloader,
                        validation_data=testloader, callbacks=callbacks)
@@ -226,4 +224,11 @@ trainer = core.Trainer(game=game, optimizer=optimizer, train_data=trainloader,
 print("Start training")
 trainer.train(n_epochs=opts.n_epochs)
 
-trainer.eval()
+if args.eval_noise:
+    print("Evaluate trained model on noise images")
+    trainer.validation_data = noiseloader
+    validation_loss, validation_interaction = trainer.eval()
+    epoch = opts.n_epochs # placeholder value
+    
+    for callback in trainer.callbacks:
+        callback.on_test_end(validation_loss, validation_interaction, epoch)
