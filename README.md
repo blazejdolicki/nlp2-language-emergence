@@ -3,7 +3,10 @@ This repository contains PyTorch code for the short paper "Visual concepts press
 
 ## Installation
 **TODO**: Add installation details
-
+Install EGG library from Github repository (commit `ba7ba8f`)
+```
+pip install git+https://github.com/facebookresearch/EGG.git@ba7ba8f
+```
 ## Running experiments
 It is possible to run 3 kinds of tasks: the `standard` signaling game with a single loss (baseline) and two tasks with additional visual pressures. You should run all experiments from the project root directory.
 ### 1. Baseline
