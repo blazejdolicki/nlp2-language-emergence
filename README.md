@@ -2,7 +2,7 @@
 This repository contains PyTorch code for the short paper "Visual concepts pressure in language emergence". 
 
 ## Installation
-Create a new conda environment with Python 3.7 and activate it.=
+Create a new conda environment with Python 3.7 and activate it.
 ```
 conda create -n le-nlp2 python=3.7
 conda activate le-nlp2
