@@ -2,8 +2,24 @@
 This repository contains PyTorch code for the short paper "Visual concepts pressure in language emergence". 
 
 ## Installation
-**TODO**: Add installation details
+Create a new conda environment with Python 3.7 and activate it.
+```
+conda create -n le-nlp2 python=3.7
+conda activate le-nlp2
+```
+Install PyTorch and related libraries.
+```
+conda install pytorch=1.8.1 torchvision=0.9.1 torchaudio=0.8.1 cudatoolkit=10.2 -c pytorch
+```
+Install other packages.
+```
+pip install -r requirements.txt
+```
 
+Install EGG library from Github repository (commit `ba7ba8f`).
+```
+pip install git+https://github.com/facebookresearch/EGG.git@ba7ba8f
+```
 ## Running experiments
 It is possible to run 3 kinds of tasks: the `standard` signaling game with a single loss (baseline) and two tasks with additional visual pressures. You should run all experiments from the project root directory.
 ### 1. Baseline
