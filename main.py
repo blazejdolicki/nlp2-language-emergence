@@ -211,7 +211,7 @@ callbacks = [core.ConsoleLogger(as_json=True, print_train_loss=True),
              core.EarlyStopperAccuracy(args.training.early_stop_accuracy),
              best_epoch_checkpointer,
              # save interactions after every epoch
-             core.InteractionSaver(train_epochs=epoch_range, test_epochs=epoch_range)] 
+             core.InteractionSaver(train_epochs=epoch_range, test_epochs=epoch_range, folder_path=f"interactions/{log_path}")] 
 
 if args.game_type == "SenderReceiverRnnGS":
     temp = core.TemperatureUpdater(agent=game.sender, decay=args.training.decay, minimum=0.1)
