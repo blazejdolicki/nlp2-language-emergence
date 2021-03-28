@@ -205,7 +205,7 @@ elif args.game_type == "SymbolGameReinforce":
 
 optimizer = torch.optim.Adam(game.parameters())
 
-epoch_range = list(range(1,opts.n_epochs+1))
+epoch_range = list(range(1,opts.n_epochs+2))
 callbacks = [core.ConsoleLogger(as_json=True, print_train_loss=True),
              core.TensorboardLogger(),
              core.EarlyStopperAccuracy(args.training.early_stop_accuracy),
@@ -237,3 +237,4 @@ if args.eval_noise:
     
     for callback in trainer.callbacks:
         callback.on_test_end(validation_loss, validation_interaction, epoch)
+        
