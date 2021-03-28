@@ -6,24 +6,21 @@ now = datetime.now()
 date_time = now.strftime("%d_%m_%Y_%H_%M_%S")
 log_file = open(f"logs/log_{date_time}.txt", "w")
 
-tasks = ["standard"] #, "img_clas", "target_clas"]
+tasks = ["standard", "img_clas", "target_clas"]
 n_imgs = [2]
-same_class_probs = [0.5]
+same_class_probs = [0.0, 0.5, 1.0]
 seeds = [7, 122, 809]
-game_types = ["SenderReceiverRnnGS", "SenderReceiverRnnReinforce"]
 for task in tasks:
     for num_imgs in n_imgs:
         for same_class_prob in same_class_probs:
             for seed in seeds:
-                for game_type in game_types:
-                    subprocess.call(["python", "main.py",  
-                                    "--task", task, 
-                                    "--num_imgs", str(num_imgs), 
-                                    "--same_class_prob", str(same_class_prob),
-                                    "--seed",str(seed),
-                                    "--game_type", game_type, 
-                                    "--eval_noise"], 
-                                    stdout=log_file)
+                subprocess.call(["python", "main.py",  
+                                "--task", task, 
+                                "--num_imgs", str(num_imgs), 
+                                "--same_class_prob", str(same_class_prob),
+                                "--seed",str(seed), 
+                                "--eval_noise"], 
+                                stdout=log_file)
             
 with open(f"logs/log_{date_time}.txt", "r") as f:
     log = f.read()
