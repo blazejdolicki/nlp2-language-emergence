@@ -1,5 +1,5 @@
-# Visual concepts pressure in language emergence
-This repository contains PyTorch code for the short paper "Visual concepts pressure in language emergence". 
+# Image classification pressures in language emergence
+This repository contains PyTorch code for the short paper "Image classification pressures in language emergence". 
 
 ## Installation
 Create a new conda environment with Python 3.7 and activate it.
